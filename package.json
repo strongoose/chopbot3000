@@ -1,6 +1,6 @@
 {
   "name": "chopbot3000",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "author": "Daniel Strong <dstrong@glyx.co.uk>",
   "description": "A bot for raising jinteki.net issues",
