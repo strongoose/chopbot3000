@@ -21,9 +21,9 @@ wrongStatusResponse = (res) ->
 newIssue = (res) ->
   lines = res.match[1].split('\n')
   title = lines.shift()
-  body = lines.concat([
-    "", "Issue reported by slack user #{res.envelope.user.real_name}"
-  ]).join('\n')
+  user_body = lines.trim().join('\n')
+  attribution = "Issue reported by slack user #{res.envelope.user.real_name}"
+  body = [user_body, attribution].join('\n\n')
   JSON.stringify({title, body})
 
 new_jwt = ->
