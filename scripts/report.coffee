@@ -21,7 +21,7 @@ wrongStatusResponse = (res) ->
 newIssue = (res) ->
   lines = res.match[1].split('\n')
   title = lines.shift()
-  user_body = lines.trim().join('\n')
+  user_body = lines.join('\n').trim()
   attribution = "Issue reported by slack user #{res.envelope.user.real_name}"
   body = [user_body, attribution].join('\n\n')
   JSON.stringify({title, body})
