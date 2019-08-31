@@ -24,10 +24,10 @@ new_jwt = ->
 with_access_token = (robot, res, callback) ->
   accessToken = robot.brain.get('accessToken')
   if accessToken? and (new Date(accessToken.expires_at) > new Date)
-    console.log("Reusing access token with expiry #{accessToken.expires_at}")
+    robot.logger.info("Reusing access token with expiry #{accessToken.expires_at}")
     callback(accessToken.token)
   else
-    console.log("Generating a new access token")
+    robot.logger.info("Generating a new access token")
     jwt = new_jwt()
     robot.http("https://api.github.com/app/installations/#{installId}/access_tokens")
       .header('Accept', 'application/vnd.github.machine-man-preview+json')
@@ -35,9 +35,12 @@ with_access_token = (robot, res, callback) ->
       .post() (err, response, body) ->
         if err
           res.send(":boom: error authenticating App: #{err}")
+          errorResponse(res, "an error ocurred while attempting to generate a jwt token")
+        else if response.statusCode isnt 201
+          wrongStatusResponse(res)
         else
           accessToken = JSON.parse(body)
-          console.log("New access token expires in #{accessToken.expires_at}")
+          robot.logger.info("New access token expires in #{accessToken.expires_at}")
           robot.brain.set('accessToken', accessToken)
           callback(accessToken.token)
 
@@ -46,22 +49,36 @@ newIssue = (res) ->
   body = 'TODO: have bodies?' # FIXME
   JSON.stringify({title, body})
 
+errorResponse = (res, error) ->
+  res.send("""
+    :boom: sorry <@#{res.envelope.user.id}>, #{error}.
+    Please report this to <@#{maintainer_id}>.
+  """)
+
+wrongStatusResponse = (res) ->
+  errorResponse(
+    res, "an unexpected status code #{response.statusCode} was returned while creating your issue."
+  )
+
 module.exports = (robot) ->
 
   robot.respond /report (.*)/i, (res) ->
     with_access_token(robot, res, (accessToken) ->
       issue = newIssue(res)
+      robot.logger.info("Reporting issue: #{issue}")
       robot.http("https://api.github.com/repos/#{repository}/issues")
         .header('Authorization', "Bearer #{accessToken}")
         .post(issue) (err, response, body) ->
           if err?
-            res.send(":boom: error creating issue: #{err}")
+            errorResponse(res, "an error ocurred while attempting to create the issue")
+          else if response.statusCode isnt 201
+            wrongStatusResponse(res)
           else
             issue_url = JSON.parse(body).html_url
             res.send(
               """
-                Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{issue_url}
-                If you'd like to add anything please thread additional comments below.
+              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{issue_url}
+              If you'd like to add anything please thread additional comments below.
               """
             )
     )
