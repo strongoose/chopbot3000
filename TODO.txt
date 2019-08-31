@@ -1,0 +1,3 @@
+- deploy to heroku
+- add listener for comment events from github
+- have comments on github synced back into slack
