@@ -16,6 +16,17 @@ repository = 'ouroboros8/test'
 #   2. Use access token to raise an issue
 #   3. Report issue with URL to slack
 
+errorResponse = (res, error) ->
+  res.send("""
+    :boom: sorry <@#{res.envelope.user.id}>, #{error}.
+    Please report this to <@#{maintainer_id}>.
+  """)
+
+wrongStatusResponse = (res) ->
+  errorResponse(
+    res, "an unexpected status code #{response.statusCode} was returned while creating your issue."
+  )
+
 newIssue = (res) ->
   lines = res.match[1].split('\n')
   title = lines.shift()
@@ -51,17 +62,6 @@ with_access_token = (robot, res, callback) ->
           robot.logger.info("New access token expires in #{accessToken.expires_at}")
           robot.brain.set('accessToken', accessToken)
           callback(accessToken.token)
-
-errorResponse = (res, error) ->
-  res.send("""
-    :boom: sorry <@#{res.envelope.user.id}>, #{error}.
-    Please report this to <@#{maintainer_id}>.
-  """)
-
-wrongStatusResponse = (res) ->
-  errorResponse(
-    res, "an unexpected status code #{response.statusCode} was returned while creating your issue."
-  )
 
 module.exports = (robot) ->
 
