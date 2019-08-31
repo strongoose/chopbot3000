@@ -18,13 +18,21 @@ wrongStatusResponse = (res) ->
     res, "an unexpected status code #{response.statusCode} was returned while creating your issue."
   )
 
+attributeTo = (user, body) ->
+  attribution = "From slack user #{user}"
+  body.concat("\n\n", attribution)
+
 newIssue = (res) ->
   lines = res.match[1].split('\n')
   title = lines.shift()
-  user_body = lines.join('\n').trim()
-  attribution = "Issue reported by slack user #{res.envelope.user.real_name}"
-  body = [user_body, attribution].join('\n\n')
-  JSON.stringify({title, body})
+  body = attributeTo(
+    res.envelope.user.real_name,
+    lines.join('\n').trim()
+  )
+  JSON.stringify({
+    title: title,
+    body: body
+  })
 
 new_jwt = ->
   now = Math.floor(Date.now() / 1000)
