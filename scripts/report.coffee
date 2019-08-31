@@ -16,6 +16,14 @@ repository = 'ouroboros8/test'
 #   2. Use access token to raise an issue
 #   3. Report issue with URL to slack
 
+newIssue = (res) ->
+  lines = res.match[1].split('\n')
+  title = lines.shift()
+  body = lines.concat([
+    "", "Issue reported by slack user #{res.envelope.user.real_name}"
+  ]).join('\n')
+  JSON.stringify({title, body})
+
 new_jwt = ->
   now = Math.floor(Date.now() / 1000)
   claims = {iat: now, exp: now + 30, iss: appId}
@@ -44,11 +52,6 @@ with_access_token = (robot, res, callback) ->
           robot.brain.set('accessToken', accessToken)
           callback(accessToken.token)
 
-newIssue = (res) ->
-  title = res.match[1]
-  body = 'TODO: have bodies?' # FIXME
-  JSON.stringify({title, body})
-
 errorResponse = (res, error) ->
   res.send("""
     :boom: sorry <@#{res.envelope.user.id}>, #{error}.
@@ -62,7 +65,7 @@ wrongStatusResponse = (res) ->
 
 module.exports = (robot) ->
 
-  robot.respond /report (.*)/i, (res) ->
+  robot.respond /report ([\s\S]+)/i, (res) ->
     with_access_token(robot, res, (accessToken) ->
       issue = newIssue(res)
       robot.logger.info("Reporting issue: #{issue}")
