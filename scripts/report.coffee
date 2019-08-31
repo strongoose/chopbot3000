@@ -22,16 +22,13 @@ wrongStatusResponse = (res, statusCode) ->
   )
 
 attributeTo = (user, body) ->
-  attribution = "From slack user #{user}"
+  attribution = "\n\n*-- reported on slack by #{user}.*"
   body.concat("\n\n", attribution)
 
 newIssue = (res) ->
   lines = res.match[1].split('\n')
   title = lines.shift()
-  body = attributeTo(
-    res.envelope.user.real_name,
-    lines.join('\n').trim()
-  )
+  body = attributeTo(res.envelope.user.real_name, lines.join('\n').trim())
   JSON.stringify({
     title: title,
     body: body
