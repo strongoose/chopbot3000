@@ -72,28 +72,29 @@ module.exports = (robot) ->
   web = new WebClient robot.adapter.options.token
 
   robot.hear /!bug ([\s\S]+)/i, (res) ->
-    res.message.thread_ts = res.message.rawMessage.ts # thread all responses
-    with_access_token robot, res, (accessToken) ->
-      issue = newIssue(res)
-      robot.logger.debug("Reporting issue: #{issue}")
-      robot.http("https://api.github.com/repos/#{repository}/issues")
-        .header('Authorization', "Bearer #{accessToken}")
-        .post(issue) (err, response, body) ->
-          if err?
-            robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
-            errorResponse(res, "an error ocurred while attempting to create the issue")
-          else if response.statusCode isnt 201
-            robot.logger.error("Unexpected statue code #{response.statusCode} while creating an issue:\n#{body}")
-            wrongStatusResponse(res, response.statusCode)
-          else
-            {html_url, comments_url} = JSON.parse(body)
-            res.send(
-              """
-              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
-              If you'd like to add anything please add additional comments below.
-              """
-            )
-            addToWatchlist(robot, res.message.thread_ts, comments_url)
+    if not res.message.thread_ts?
+      res.message.thread_ts = res.message.rawMessage.ts # thread all responses
+      with_access_token robot, res, (accessToken) ->
+        issue = newIssue(res)
+        robot.logger.debug("Reporting issue: #{issue}")
+        robot.http("https://api.github.com/repos/#{repository}/issues")
+          .header('Authorization', "Bearer #{accessToken}")
+          .post(issue) (err, response, body) ->
+            if err?
+              robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
+              errorResponse(res, "an error ocurred while attempting to create the issue")
+            else if response.statusCode isnt 201
+              robot.logger.error("Unexpected statue code #{response.statusCode} while creating an issue:\n#{body}")
+              wrongStatusResponse(res, response.statusCode)
+            else
+              {html_url, comments_url} = JSON.parse(body)
+              res.send(
+                """
+                Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
+                If you'd like to add anything please add additional comments below.
+                """
+              )
+              addToWatchlist(robot, res.message.thread_ts, comments_url)
 
   robot.hear /.*/i, (res) ->
     thread = res.message.thread_ts
