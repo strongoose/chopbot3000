@@ -7,15 +7,6 @@ privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY
 installId = 1731296
 repository = 'ouroboros8/test'
 
-# Basic flow will be:
-#   1. If we need a new access token
-#     a. get a JWT
-#     a. use it to get an access token
-#     - Will start out by just getting a new token every time, should probably
-#       put this in hubot's brain later?
-#   2. Use access token to raise an issue
-#   3. Report issue with URL to slack
-
 errorResponse = (res, error) ->
   res.send("""
     :boom: sorry <@#{res.envelope.user.id}>, #{error}.
