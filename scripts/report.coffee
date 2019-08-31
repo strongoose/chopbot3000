@@ -4,6 +4,8 @@ jwt = require 'jsonwebtoken'
 appId = process.env.HUBOT_GITHUB_APP_ID
 privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY
 
+maintainer_id = 'UG4KE3QRH'
+
 # FIXME: hardcoded config
 installId = 1731296
 repository = 'ouroboros8/test'
@@ -14,9 +16,9 @@ errorResponse = (res, error) ->
     Please report this to <@#{maintainer_id}>.
   """)
 
-wrongStatusResponse = (res) ->
+wrongStatusResponse = (res, statusCode) ->
   errorResponse(
-    res, "an unexpected status code #{response.statusCode} was returned while creating your issue."
+    res, "an unexpected status code #{statusCode} was returned."
   )
 
 attributeTo = (user, body) ->
@@ -40,9 +42,9 @@ new_jwt = ->
   claims = {iat: now, exp: now + 30, iss: appId}
   jwt.sign(claims, privateKey, { algorithm: 'RS256' })
 
-addToWatchlist = (robot, thread_ts, issue_url) ->
+addToWatchlist = (robot, thread_ts, comments_url) ->
   watchList = getWatchList(robot)
-  watchList[thread_ts] = issue_url
+  watchList[thread_ts] = comments_url
   robot.brain.set('watchList', watchList)
 
 getWatchList = (robot) ->
@@ -64,7 +66,7 @@ with_access_token = (robot, res, callback) ->
           res.send(":boom: error authenticating App: #{err}")
           errorResponse(res, "an error ocurred while attempting to generate a jwt token")
         else if response.statusCode isnt 201
-          wrongStatusResponse(res)
+          wrongStatusResponse(res, response.statusCode)
         else
           accessToken = JSON.parse(body)
           robot.logger.info("New access token expires in #{accessToken.expires_at}")
@@ -72,6 +74,7 @@ with_access_token = (robot, res, callback) ->
           callback(accessToken.token)
 
 module.exports = (robot) ->
+  web = new WebClient robot.adapter.options.token
 
   robot.hear /!bug ([\s\S]+)/i, (res) ->
     res.message.thread_ts = res.message.rawMessage.ts # thread all responses
@@ -84,7 +87,7 @@ module.exports = (robot) ->
           if err?
             errorResponse(res, "an error ocurred while attempting to create the issue")
           else if response.statusCode isnt 201
-            wrongStatusResponse(res)
+            wrongStatusResponse(res, response.statusCode)
           else
             {html_url, url} = JSON.parse(body)
             res.send(
