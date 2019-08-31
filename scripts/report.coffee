@@ -89,24 +89,45 @@ module.exports = (robot) ->
           else if response.statusCode isnt 201
             wrongStatusResponse(res, response.statusCode)
           else
-            {html_url, url} = JSON.parse(body)
+            {html_url, comments_url} = JSON.parse(body)
             res.send(
               """
               Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
               If you'd like to add anything please add additional comments below.
               """
             )
-            addToWatchlist(robot, res.message.thread_ts, url)
+            addToWatchlist(robot, res.message.thread_ts, comments_url)
 
   robot.hear /.*/i, (res) ->
-    console.log('Huh? What?')
     thread = res.message.thread_ts
     if thread?
-      console.log("Ooh thread: #{thread}")
-      console.log(getWatchList(robot))
-      issue_url = getWatchList(robot)[thread]
-      if issue_url?
-        robot.logger.info("Got a message relating to #{issue_url} in #{thread}")
+      comments_url = getWatchList(robot)[thread]
+      if comments_url?
+        robot.logger.info("Got a message relating to #{comments_url} in #{thread}")
+        res.message.thread_ts = res.message.rawMessage.ts # thread all responses
+        web.reactions.add
+          name: "speech_balloon"
+          channel: res.message.room
+          timestamp: res.message.id
         with_access_token robot, res, (accessToken) ->
-          comment = attributeTo(res.envelope.user.real_name, res.match[0])
-          console.log(comment)
+          comment = JSON.stringify({
+            body: attributeTo(res.envelope.user.real_name, res.match[0])
+          })
+          robot.http(comments_url)
+            .header('Authorization', "Bearer #{accessToken}")
+            .post(comment) (err, response, body) ->
+              if err?
+                robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
+                errorResponse(res, "an error ocurred while attempting to post your comment")
+              else if response.statusCode isnt 201
+                robot.logger.error("Unexpected statue code #{response.statusCode} while posting a comment:\n#{body}")
+                wrongStatusResponse(res, response.statusCode)
+              else
+                web.reactions.remove
+                  name: "speech_balloon"
+                  channel: res.message.room
+                  timestamp: res.message.id
+                web.reactions.add
+                  name: "heavy_check_mark"
+                  channel: res.message.room
+                  timestamp: res.message.id
