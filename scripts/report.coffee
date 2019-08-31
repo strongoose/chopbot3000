@@ -63,9 +63,10 @@ with_access_token = (robot, res, callback) ->
       .header('Authorization', "Bearer #{app_token}")
       .post() (err, response, body) ->
         if err
-          res.send(":boom: error authenticating App: #{err}")
+          robot.logger.error("An HTTP error ocurred while attempting to generate an access token:\n #{err}")
           errorResponse(res, "an error ocurred while attempting to generate a jwt token")
         else if response.statusCode isnt 201
+          robot.logger.error("Unexpected statue code #{response.statusCode} while attempting to generate an access token:\n#{body}")
           wrongStatusResponse(res, response.statusCode)
         else
           accessToken = JSON.parse(body)
@@ -85,8 +86,10 @@ module.exports = (robot) ->
         .header('Authorization', "Bearer #{accessToken}")
         .post(issue) (err, response, body) ->
           if err?
+            robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
             errorResponse(res, "an error ocurred while attempting to create the issue")
           else if response.statusCode isnt 201
+            robot.logger.error("Unexpected statue code #{response.statusCode} while creating an issue:\n#{body}")
             wrongStatusResponse(res, response.statusCode)
           else
             {html_url, comments_url} = JSON.parse(body)
