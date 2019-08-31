@@ -3,12 +3,9 @@ jwt = require 'jsonwebtoken'
 
 appId = process.env.HUBOT_GITHUB_APP_ID
 privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY
-
-maintainer_id = 'UG4KE3QRH'
-
-# FIXME: hardcoded config
-installId = 1731296
-repository = 'ouroboros8/test'
+maintainer_id = process.env.HUBOT_SLACK_MAINTAINER_ID
+repository = process.env.HUBOT_GITHUB_REPOSITORY
+installId = process.env.HUBOT_GITHUB_APP_INSTALL_ID
 
 errorResponse = (res, error) ->
   res.send("""
