@@ -38,10 +38,10 @@ with_access_token = (robot, res, callback) ->
     callback(accessToken.token)
   else
     robot.logger.info("Generating a new access token")
-    jwt = new_jwt()
+    app_token = new_jwt()
     robot.http("https://api.github.com/app/installations/#{installId}/access_tokens")
       .header('Accept', 'application/vnd.github.machine-man-preview+json')
-      .header('Authorization', "Bearer #{jwt}")
+      .header('Authorization', "Bearer #{app_token}")
       .post() (err, response, body) ->
         if err
           res.send(":boom: error authenticating App: #{err}")
