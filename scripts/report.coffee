@@ -39,6 +39,14 @@ new_jwt = ->
   claims = {iat: now, exp: now + 30, iss: appId}
   jwt.sign(claims, privateKey, { algorithm: 'RS256' })
 
+addToWatchlist = (robot, thread_ts, issue_url) ->
+  watchList = getWatchList(robot)
+  watchList[thread_ts] = issue_url
+  robot.brain.set('watchList', watchList)
+
+getWatchList = (robot) ->
+  robot.brain.get('watchList') or {}
+
 with_access_token = (robot, res, callback) ->
   accessToken = robot.brain.get('accessToken')
   if accessToken? and (new Date(accessToken.expires_at) > new Date)
@@ -64,8 +72,9 @@ with_access_token = (robot, res, callback) ->
 
 module.exports = (robot) ->
 
-  robot.respond /report ([\s\S]+)/i, (res) ->
-    with_access_token(robot, res, (accessToken) ->
+  robot.hear /!bug ([\s\S]+)/i, (res) ->
+    res.message.thread_ts = res.message.rawMessage.ts # thread all responses
+    with_access_token robot, res, (accessToken) ->
       issue = newIssue(res)
       robot.logger.debug("Reporting issue: #{issue}")
       robot.http("https://api.github.com/repos/#{repository}/issues")
@@ -76,12 +85,24 @@ module.exports = (robot) ->
           else if response.statusCode isnt 201
             wrongStatusResponse(res)
           else
-            issue_url = JSON.parse(body).html_url
+            {html_url, url} = JSON.parse(body)
             res.send(
               """
-              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{issue_url}
-              If you'd like to add anything please thread additional comments below.
+              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
+              If you'd like to add anything please add additional comments below.
               """
             )
-    )
-    # report robot, res
+            addToWatchlist(robot, res.message.thread_ts, url)
+
+  robot.hear /.*/i, (res) ->
+    console.log('Huh? What?')
+    thread = res.message.thread_ts
+    if thread?
+      console.log("Ooh thread: #{thread}")
+      console.log(getWatchList(robot))
+      issue_url = getWatchList(robot)[thread]
+      if issue_url?
+        robot.logger.info("Got a message relating to #{issue_url} in #{thread}")
+        with_access_token robot, res, (accessToken) ->
+          comment = attributeTo(res.envelope.user.real_name, res.match[0])
+          console.log(comment)
