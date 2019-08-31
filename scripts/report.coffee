@@ -1,4 +1,5 @@
 jwt = require 'jsonwebtoken'
+{WebClient} = require "@slack/client"
 
 appId = process.env.HUBOT_GITHUB_APP_ID
 privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY

@@ -5,6 +5,7 @@
   "author": "Daniel Strong <dstrong@glyx.co.uk>",
   "description": "A bot for raising jinteki.net issues",
   "dependencies": {
+    "@slack/client": "^5.0.2",
     "hubot": "^3.3.2",
     "hubot-diagnostics": "^1.0.0",
     "hubot-google-images": "^0.2.7",
