@@ -59,7 +59,7 @@ module.exports = (robot) ->
   robot.respond /report ([\s\S]+)/i, (res) ->
     with_access_token(robot, res, (accessToken) ->
       issue = newIssue(res)
-      robot.logger.info("Reporting issue: #{issue}")
+      robot.logger.debug("Reporting issue: #{issue}")
       robot.http("https://api.github.com/repos/#{repository}/issues")
         .header('Authorization', "Bearer #{accessToken}")
         .post(issue) (err, response, body) ->
