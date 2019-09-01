@@ -43,12 +43,13 @@ new_jwt = ->
   claims = {iat: now, exp: now + 30, iss: appId}
   jwt.sign(claims, privateKey, { algorithm: 'RS256' })
 
-addToWatchlist = (robot, thread_ts, comments_url) ->
+addToWatchlist = (robot, thread_ts, issue) ->
   watchList = getWatchList(robot)
-  watchList[thread_ts] = comments_url
+  watchList[thread_ts] = issue
   robot.brain.set('watchList', watchList)
 
 getWatchList = (robot) ->
+  console.log(robot.brain.get('watchList') or {})
   robot.brain.get('watchList') or {}
 
 thread_response = (res) ->
@@ -92,21 +93,21 @@ module.exports = (robot) ->
         robot.http("https://api.github.com/repos/#{repository}/issues")
           .header('Authorization', "Bearer #{accessToken}")
           .post(issue) withErrorHandling robot, res, "creating the issue", (err, response, body) ->
-            {html_url, comments_url} = JSON.parse(body)
+            issue = JSON.parse(body)
             res.send(
               """
-              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
+              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{issue.html_url}
               If you'd like to add anything please add additional comments below.
               """
             )
-            addToWatchlist(robot, res.message.thread_ts, comments_url)
+            addToWatchlist(robot, res.message.thread_ts, issue)
 
   robot.hear /([\s\S]+)/i, (res) ->
     thread = res.message.thread_ts
     if thread?
-      comments_url = getWatchList(robot)[thread]
-      if comments_url?
-        robot.logger.info("Got a message relating to #{comments_url} in #{thread}")
+      issue = getWatchList(robot)[thread]
+      if issue?
+        robot.logger.info("Got a message relating to issue ##{issue.number} in thread #{thread}")
         web.reactions.add
           name: "speech_balloon"
           channel: res.message.room
@@ -114,9 +115,9 @@ module.exports = (robot) ->
         thread_response(res)
         with_access_token robot, res, (accessToken) ->
           comment = newComment(res)
-          robot.http(comments_url)
+          robot.http(issue.comments_url)
             .header('Authorization', "Bearer #{accessToken}")
-            .post(comment) withErrorHandling robot, res, "adding a comment to the issue", (err, response, body) ->
+            .post(comment) withErrorHandling robot, res, "adding a comment to issue #{issue.number}", (err, response, body) ->
               web.reactions.remove
                 name: "speech_balloon"
                 channel: res.message.room
