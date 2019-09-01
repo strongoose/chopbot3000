@@ -1,4 +1,5 @@
 - store entire issue in watchlist
+- allow slack users to add files to issues/comments
 - add listener for comment events from github
 - have comments on github synced back into slack
 - slightly concerned about web.reactions calls
