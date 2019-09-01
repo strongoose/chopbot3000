@@ -10,8 +10,8 @@ installId = process.env.HUBOT_GITHUB_APP_INSTALL_ID
 capitalize = (string) ->
   string.charAt(0).toUpperCase() + string.slice(1)
 
-handleError = (robot, res, action, err, errMsg) ->
-  friendlyMessage = "#{errMsg} while #{action}"
+constructError = (robot, res, err, errMsg, contextMsg) ->
+  friendlyMessage = "#{errMsg} while #{contextMsg}"
   logMessage = capitalize(friendlyMessage).concat(":\n#{err}")
   slackMessage = """
     :boom: sorry <@#{res.envelope.user.id}>, #{friendlyMessage}.
@@ -58,11 +58,11 @@ with_access_token = (robot, res, callback) ->
       .header('Accept', 'application/vnd.github.machine-man-preview+json')
       .header('Authorization', "Bearer #{app_token}")
       .post() (err, response, body) ->
-        action = "attempting to generate an access token"
+        contextMsg = "generating an access token"
         if err
-          handleError(robot, res, action, err, "an HTTP error occurred")
+          constructError(robot, res, err, "an HTTP error occurred", contextMsg)
         else if response.statusCode isnt 201
-          handleError(robot, res, action, err, "an unexpected states code #{response.statusCode} was returned")
+          constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
         else
           accessToken = JSON.parse(body)
           robot.logger.info("New access token expires in #{accessToken.expires_at}")
@@ -81,11 +81,11 @@ module.exports = (robot) ->
         robot.http("https://api.github.com/repos/#{repository}/issues")
           .header('Authorization', "Bearer #{accessToken}")
           .post(issue) (err, response, body) ->
-            action = "attempting to create the issue"
-            if err?
-              handleError(robot, res, action, err, "an HTTP error occurred")
+            contextMsg = "creating the issue"
+            if err
+              constructError(robot, res, err, "an HTTP error occurred", contextMsg)
             else if response.statusCode isnt 201
-              handleError(robot, res, action, body, "an unexpected states code #{response.statusCode} was returned")
+              constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
             else
               {html_url, comments_url} = JSON.parse(body)
               res.send(
@@ -114,10 +114,11 @@ module.exports = (robot) ->
           robot.http(comments_url)
             .header('Authorization', "Bearer #{accessToken}")
             .post(comment) (err, response, body) ->
-              if err?
-                handleError(robot, res, action, err, "an HTTP error occurred")
+              contextMsg = "adding a comment to the issue"
+              if err
+                constructError(robot, res, err, "an HTTP error occurred", contextMsg)
               else if response.statusCode isnt 201
-                handleError(robot, res, action, body, "an unexpected states code #{response.statusCode} was returned")
+                constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
               else
                 web.reactions.remove
                   name: "speech_balloon"
