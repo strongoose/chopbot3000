@@ -51,6 +51,9 @@ addToWatchlist = (robot, thread_ts, comments_url) ->
 getWatchList = (robot) ->
   robot.brain.get('watchList') or {}
 
+thread_response = (res) ->
+  res.message.thread_ts = res.message.rawMessage.ts
+
 withErrorHandling = (robot, res, contextMsg, fn) ->
   (err, response, body) ->
     if err
@@ -82,7 +85,7 @@ module.exports = (robot) ->
 
   robot.hear /!bug ([\s\S]+)/i, (res) ->
     if not res.message.thread_ts?
-      res.message.thread_ts = res.message.rawMessage.ts # thread all responses
+      thread_response(res)
       with_access_token robot, res, (accessToken) ->
         issue = newIssue(res)
         robot.logger.debug("Reporting issue: #{issue}")
@@ -104,11 +107,11 @@ module.exports = (robot) ->
       comments_url = getWatchList(robot)[thread]
       if comments_url?
         robot.logger.info("Got a message relating to #{comments_url} in #{thread}")
-        res.message.thread_ts = res.message.rawMessage.ts # thread all responses
         web.reactions.add
           name: "speech_balloon"
           channel: res.message.room
           timestamp: res.message.id
+        thread_response(res)
         with_access_token robot, res, (accessToken) ->
           comment = newComment(res)
           robot.http(comments_url)
