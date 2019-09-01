@@ -7,16 +7,18 @@ maintainer_id = process.env.HUBOT_SLACK_MAINTAINER_ID
 repository = process.env.HUBOT_GITHUB_REPOSITORY
 installId = process.env.HUBOT_GITHUB_APP_INSTALL_ID
 
-errorResponse = (res, error) ->
-  res.send("""
-    :boom: sorry <@#{res.envelope.user.id}>, #{error}.
-    Please report this to <@#{maintainer_id}>.
-  """)
+capitalize = (string) ->
+  string.charAt(0).toUpperCase() + string.slice(1)
 
-wrongStatusResponse = (res, statusCode) ->
-  errorResponse(
-    res, "an unexpected status code #{statusCode} was returned."
-  )
+handleError = (robot, res, action, err, errMsg) ->
+  friendlyMessage = "#{errMsg} while #{action}"
+  logMessage = capitalize(friendlyMessage).concat(":\n#{err}")
+  slackMessage = """
+    :boom: sorry <@#{res.envelope.user.id}>, #{friendlyMessage}.
+    Please report this to <@#{maintainer_id}>.
+  """
+  robot.logger.error(logMessage)
+  res.send(slackMessage)
 
 attributeTo = (user, body) ->
   attribution = "\n\n*-- reported on slack by #{user}.*"
@@ -56,12 +58,11 @@ with_access_token = (robot, res, callback) ->
       .header('Accept', 'application/vnd.github.machine-man-preview+json')
       .header('Authorization', "Bearer #{app_token}")
       .post() (err, response, body) ->
+        action = "attempting to generate an access token"
         if err
-          robot.logger.error("An HTTP error ocurred while attempting to generate an access token:\n #{err}")
-          errorResponse(res, "an error ocurred while attempting to generate a jwt token")
+          handleError(robot, res, action, err, "an HTTP error occurred")
         else if response.statusCode isnt 201
-          robot.logger.error("Unexpected statue code #{response.statusCode} while attempting to generate an access token:\n#{body}")
-          wrongStatusResponse(res, response.statusCode)
+          handleError(robot, res, action, err, "an unexpected states code #{response.statusCode} was returned")
         else
           accessToken = JSON.parse(body)
           robot.logger.info("New access token expires in #{accessToken.expires_at}")
@@ -80,12 +81,11 @@ module.exports = (robot) ->
         robot.http("https://api.github.com/repos/#{repository}/issues")
           .header('Authorization', "Bearer #{accessToken}")
           .post(issue) (err, response, body) ->
+            action = "attempting to create the issue"
             if err?
-              robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
-              errorResponse(res, "an error ocurred while attempting to create the issue")
+              handleError(robot, res, action, err, "an HTTP error occurred")
             else if response.statusCode isnt 201
-              robot.logger.error("Unexpected statue code #{response.statusCode} while creating an issue:\n#{body}")
-              wrongStatusResponse(res, response.statusCode)
+              handleError(robot, res, action, body, "an unexpected states code #{response.statusCode} was returned")
             else
               {html_url, comments_url} = JSON.parse(body)
               res.send(
@@ -115,11 +115,9 @@ module.exports = (robot) ->
             .header('Authorization', "Bearer #{accessToken}")
             .post(comment) (err, response, body) ->
               if err?
-                robot.logger.error("An HTTP error ocurred while attempting to create the issue:\n #{err}")
-                errorResponse(res, "an error ocurred while attempting to post your comment")
+                handleError(robot, res, action, err, "an HTTP error occurred")
               else if response.statusCode isnt 201
-                robot.logger.error("Unexpected statue code #{response.statusCode} while posting a comment:\n#{body}")
-                wrongStatusResponse(res, response.statusCode)
+                handleError(robot, res, action, body, "an unexpected states code #{response.statusCode} was returned")
               else
                 web.reactions.remove
                   name: "speech_balloon"
