@@ -46,6 +46,15 @@ addToWatchlist = (robot, thread_ts, comments_url) ->
 getWatchList = (robot) ->
   robot.brain.get('watchList') or {}
 
+withErrorHandling = (robot, res, contextMsg, fn) ->
+  (err, response, body) ->
+    if err
+      constructError(robot, res, err, "an HTTP error occurred", contextMsg)
+    else if response.statusCode isnt 201
+      constructError(robot, res, body, "an unexpected states code #{response.statusCode} was returned", contextMsg)
+    else
+      fn(err, response, body)
+
 with_access_token = (robot, res, callback) ->
   accessToken = robot.brain.get('accessToken')
   if accessToken? and (new Date(accessToken.expires_at) > new Date)
@@ -57,17 +66,11 @@ with_access_token = (robot, res, callback) ->
     robot.http("https://api.github.com/app/installations/#{installId}/access_tokens")
       .header('Accept', 'application/vnd.github.machine-man-preview+json')
       .header('Authorization', "Bearer #{app_token}")
-      .post() (err, response, body) ->
-        contextMsg = "generating an access token"
-        if err
-          constructError(robot, res, err, "an HTTP error occurred", contextMsg)
-        else if response.statusCode isnt 201
-          constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
-        else
-          accessToken = JSON.parse(body)
-          robot.logger.info("New access token expires in #{accessToken.expires_at}")
-          robot.brain.set('accessToken', accessToken)
-          callback(accessToken.token)
+      .post() withErrorHandling robot, res, "generating an access token", (err, response, body) ->
+        accessToken = JSON.parse(body)
+        robot.logger.info("New access token expires in #{accessToken.expires_at}")
+        robot.brain.set('accessToken', accessToken)
+        callback(accessToken.token)
 
 module.exports = (robot) ->
   web = new WebClient robot.adapter.options.token
@@ -80,21 +83,15 @@ module.exports = (robot) ->
         robot.logger.debug("Reporting issue: #{issue}")
         robot.http("https://api.github.com/repos/#{repository}/issues")
           .header('Authorization', "Bearer #{accessToken}")
-          .post(issue) (err, response, body) ->
-            contextMsg = "creating the issue"
-            if err
-              constructError(robot, res, err, "an HTTP error occurred", contextMsg)
-            else if response.statusCode isnt 201
-              constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
-            else
-              {html_url, comments_url} = JSON.parse(body)
-              res.send(
-                """
-                Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
-                If you'd like to add anything please add additional comments below.
-                """
-              )
-              addToWatchlist(robot, res.message.thread_ts, comments_url)
+          .post(issue) withErrorHandling robot, res, "creating the issue", (err, response, body) ->
+            {html_url, comments_url} = JSON.parse(body)
+            res.send(
+              """
+              Thanks <@#{res.envelope.user.id}>, I've raised your issue here: #{html_url}
+              If you'd like to add anything please add additional comments below.
+              """
+            )
+            addToWatchlist(robot, res.message.thread_ts, comments_url)
 
   robot.hear /.*/i, (res) ->
     thread = res.message.thread_ts
@@ -113,18 +110,12 @@ module.exports = (robot) ->
           })
           robot.http(comments_url)
             .header('Authorization', "Bearer #{accessToken}")
-            .post(comment) (err, response, body) ->
-              contextMsg = "adding a comment to the issue"
-              if err
-                constructError(robot, res, err, "an HTTP error occurred", contextMsg)
-              else if response.statusCode isnt 201
-                constructError(robot, res, err, "an unexpected states code #{response.statusCode} was returned", contextMsg)
-              else
-                web.reactions.remove
-                  name: "speech_balloon"
-                  channel: res.message.room
-                  timestamp: res.message.id
-                web.reactions.add
-                  name: "heavy_check_mark"
-                  channel: res.message.room
-                  timestamp: res.message.id
+            .post(comment) withErrorHandling robot, res, "adding a comment to the issue", (err, response, body) ->
+              web.reactions.remove
+                name: "speech_balloon"
+                channel: res.message.room
+                timestamp: res.message.id
+              web.reactions.add
+                name: "heavy_check_mark"
+                channel: res.message.room
+                timestamp: res.message.id
