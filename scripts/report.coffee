@@ -33,6 +33,11 @@ newIssue = (res) ->
     body: body
   })
 
+newComment = (res) ->
+  JSON.stringify({
+    body: attributeTo(res.envelope.user.real_name, res.match[1].trim())
+  })
+
 new_jwt = ->
   now = Math.floor(Date.now() / 1000)
   claims = {iat: now, exp: now + 30, iss: appId}
@@ -93,7 +98,7 @@ module.exports = (robot) ->
             )
             addToWatchlist(robot, res.message.thread_ts, comments_url)
 
-  robot.hear /.*/i, (res) ->
+  robot.hear /([\s\S]+)/i, (res) ->
     thread = res.message.thread_ts
     if thread?
       comments_url = getWatchList(robot)[thread]
@@ -105,9 +110,7 @@ module.exports = (robot) ->
           channel: res.message.room
           timestamp: res.message.id
         with_access_token robot, res, (accessToken) ->
-          comment = JSON.stringify({
-            body: attributeTo(res.envelope.user.real_name, res.match[0])
-          })
+          comment = newComment(res)
           robot.http(comments_url)
             .header('Authorization', "Bearer #{accessToken}")
             .post(comment) withErrorHandling robot, res, "adding a comment to the issue", (err, response, body) ->
