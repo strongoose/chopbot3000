@@ -1,3 +1,4 @@
+# This is a hacked together script to allow users to raise issues with jinteki.net on slack
 jwt = require 'jsonwebtoken'
 {WebClient} = require "@slack/client"
 S3 = require('aws-sdk/clients/s3')
@@ -9,6 +10,11 @@ privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY
 maintainer_id = process.env.HUBOT_SLACK_MAINTAINER_ID
 repository = process.env.HUBOT_GITHUB_REPOSITORY
 installId = process.env.HUBOT_GITHUB_APP_INSTALL_ID
+
+fileBucketName = "chopshots"
+fileBucketUrl = "https://#{fileBucketName}.s3.eu-west-2.amazonaws.com"
+
+s3 = new S3()
 
 fileExt = (filename) ->
   parts = filename.split('.')
@@ -30,19 +36,25 @@ attributeTo = (user, body) ->
   attribution = "\n\n*-- reported on slack by #{user}.*"
   body.concat("\n\n", attribution)
 
-newIssue = (res) ->
+newIssueJson = (res, file_urls) ->
   lines = res.match[1].split('\n')
-  title = lines.shift()
-  body = attributeTo(res.envelope.user.real_name, lines.join('\n').trim())
+  title = lines.shift() #FIXME this is undocumented and should be clarified
+  file_links = file_urls.map markdownFile
+  lines_with_files = lines.concat(file_links).join('\n').trim()
   JSON.stringify({
     title: title,
-    body: body
+    body: attributeTo(res.envelope.user.real_name, lines_with_files)
   })
 
-newComment = (res) ->
+newCommentJson = (res, file_urls) ->
+  file_links = file_urls.map markdownFile
+  comment_with_files = [res.match[1]].concat(file_links).join('\n').trim()
   JSON.stringify({
-    body: attributeTo(res.envelope.user.real_name, res.match[1].trim())
+    body: attributeTo(res.envelope.user.real_name, comment_with_files)
   })
+
+markdownFile = (file_url) ->
+  "![](#{file_url})"
 
 new_jwt = ->
   now = Math.floor(Date.now() / 1000)
@@ -69,32 +81,32 @@ withErrorHandling = (robot, res, contextMsg, fn) ->
     else
       fn(err, response, body)
 
-uploadFiles = (res) ->
-  res.message.rawMessage.files.map (file) ->
-    axios.get(file.url_private, {
-      headers: {'Authorization': "Bearer #{robot.adapter.options.token}"}
-      responseType: 'stream'
-    }).then (response) ->
-      fileNameParts = file.name.split('.')
-      ext = file.name.split('.').pop()
-      if ext != file.name
-        objectKey += '.' + ext
-      params =
-        ACL: 'public-read'
-        Body: response.data
-        Bucket: 'chopshots'
-        Key: objectKey
-        ContentType: file.mimetype
-      console.log('generated params')
-      s3.upload params, (err, data) ->
-        console.log('uploaded or err')
-        if err
-          constructError(robot, res, err, "an error occurred", "uploading #{file.name} to S3")
-        else
-          console.log("uploaded #{objectKey}")
-          # console.log(data)
-    .catch (err) ->
-      console.log(err)
+storeFile = (sourceUrl, slackToken, mimetype) ->
+  storageKey = uuid()
+  axios.get(sourceUrl, {
+    headers: {'Authorization': "Bearer #{slackToken}"}
+    responseType: 'stream'
+  }).then (response) ->
+    params =
+      ACL: 'public-read'
+      Body: response.data
+      Bucket: fileBucketName
+      Key: storageKey
+      ContentType: mimetype
+    s3.upload params, (err, data) ->
+      if err
+        console.log("Error uploading files to s3: #{err}") #FIXME bad error handling
+  .catch (err) ->
+    console.log("Error fetching files from Slack: #{err}") #FIXME bad error handling
+  "#{fileBucketUrl}/#{storageKey}"
+
+storeFiles = (robot, res) ->
+  files = res.message.rawMessage.files
+  if files?
+    files.map (file) ->
+      storeFile(file.url_private, robot.adapter.options.token, file.mimetype)
+  else
+    []
 
 with_access_token = (robot, res, callback) ->
   accessToken = robot.brain.get('accessToken')
@@ -115,13 +127,14 @@ with_access_token = (robot, res, callback) ->
 
 module.exports = (robot) ->
   web = new WebClient robot.adapter.options.token
-  s3 = new S3()
 
   robot.hear /!bug ([\s\S]+)/i, (res) ->
-    thread_response(res)
     if not res.message.thread_ts?
+      robot.logger.debug("Heard a new bug report")
+      thread_response(res)
       with_access_token robot, res, (accessToken) ->
-        issue = newIssue(res)
+        file_urls = storeFiles(robot, res)
+        issue = newIssueJson(res, file_urls)
         robot.logger.debug("Reporting issue: #{issue}")
         robot.http("https://api.github.com/repos/#{repository}/issues")
           .header('Authorization', "Bearer #{accessToken}")
@@ -136,18 +149,20 @@ module.exports = (robot) ->
             addToWatchlist(robot, res.message.thread_ts, issue)
 
   robot.hear /([\s\S]+)/i, (res) ->
-    thread_response(res)
     thread = res.message.thread_ts
     if thread?
       issue = getWatchList(robot)[thread]
       if issue?
-        robot.logger.info("Got a message relating to issue ##{issue.number} in thread #{thread}")
+        robot.logger.debug("Got a message relating to issue ##{issue.number} in thread #{thread}")
+        thread_response(res)
         web.reactions.add
           name: "speech_balloon"
           channel: res.message.room
           timestamp: res.message.id
         with_access_token robot, res, (accessToken) ->
-          comment = newComment(res)
+          file_urls = storeFiles(robot, res)
+          comment = newCommentJson(res, file_urls)
+          robot.logger.debug("Adding a comment to issue #{issue.number}")
           robot.http(issue.comments_url)
             .header('Authorization', "Bearer #{accessToken}")
             .post(comment) withErrorHandling robot, res, "adding a comment to issue #{issue.number}", (err, response, body) ->
@@ -159,9 +174,3 @@ module.exports = (robot) ->
                 name: "heavy_check_mark"
                 channel: res.message.room
                 timestamp: res.message.id
-
-  robot.hear /([\s\S]*)/i, (res) ->
-    thread_response(res)
-    if res.message.rawMessage.files?
-      console.log('processing file')
-      uploadFiles res
