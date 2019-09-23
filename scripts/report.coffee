@@ -1,11 +1,17 @@
 jwt = require 'jsonwebtoken'
 {WebClient} = require "@slack/client"
+S3 = require('aws-sdk/clients/s3')
+uuid = require('uuid/v4')
+axios = require('axios')
 
 appId = process.env.HUBOT_GITHUB_APP_ID
 privateKey = process.env.HUBOT_GITHUB_APP_PRIVATE_KEY
 maintainer_id = process.env.HUBOT_SLACK_MAINTAINER_ID
 repository = process.env.HUBOT_GITHUB_REPOSITORY
 installId = process.env.HUBOT_GITHUB_APP_INSTALL_ID
+
+fileExt = (filename) ->
+  parts = filename.split('.')
 
 capitalize = (string) ->
   string.charAt(0).toUpperCase() + string.slice(1)
@@ -49,7 +55,6 @@ addToWatchlist = (robot, thread_ts, issue) ->
   robot.brain.set('watchList', watchList)
 
 getWatchList = (robot) ->
-  console.log(robot.brain.get('watchList') or {})
   robot.brain.get('watchList') or {}
 
 thread_response = (res) ->
@@ -59,10 +64,37 @@ withErrorHandling = (robot, res, contextMsg, fn) ->
   (err, response, body) ->
     if err
       constructError(robot, res, err, "an HTTP error occurred", contextMsg)
-    else if response.statusCode isnt 201
-      constructError(robot, res, body, "an unexpected states code #{response.statusCode} was returned", contextMsg)
+    else if response.statusCode >= 299
+      constructError(robot, res, body, "an unexpected status code #{response.statusCode} was returned", contextMsg)
     else
       fn(err, response, body)
+
+uploadFiles = (res) ->
+  res.message.rawMessage.files.map (file) ->
+    axios.get(file.url_private, {
+      headers: {'Authorization': "Bearer #{robot.adapter.options.token}"}
+      responseType: 'stream'
+    }).then (response) ->
+      fileNameParts = file.name.split('.')
+      ext = file.name.split('.').pop()
+      if ext != file.name
+        objectKey += '.' + ext
+      params =
+        ACL: 'public-read'
+        Body: response.data
+        Bucket: 'chopshots'
+        Key: objectKey
+        ContentType: file.mimetype
+      console.log('generated params')
+      s3.upload params, (err, data) ->
+        console.log('uploaded or err')
+        if err
+          constructError(robot, res, err, "an error occurred", "uploading #{file.name} to S3")
+        else
+          console.log("uploaded #{objectKey}")
+          # console.log(data)
+    .catch (err) ->
+      console.log(err)
 
 with_access_token = (robot, res, callback) ->
   accessToken = robot.brain.get('accessToken')
@@ -83,10 +115,11 @@ with_access_token = (robot, res, callback) ->
 
 module.exports = (robot) ->
   web = new WebClient robot.adapter.options.token
+  s3 = new S3()
 
   robot.hear /!bug ([\s\S]+)/i, (res) ->
+    thread_response(res)
     if not res.message.thread_ts?
-      thread_response(res)
       with_access_token robot, res, (accessToken) ->
         issue = newIssue(res)
         robot.logger.debug("Reporting issue: #{issue}")
@@ -103,6 +136,7 @@ module.exports = (robot) ->
             addToWatchlist(robot, res.message.thread_ts, issue)
 
   robot.hear /([\s\S]+)/i, (res) ->
+    thread_response(res)
     thread = res.message.thread_ts
     if thread?
       issue = getWatchList(robot)[thread]
@@ -112,7 +146,6 @@ module.exports = (robot) ->
           name: "speech_balloon"
           channel: res.message.room
           timestamp: res.message.id
-        thread_response(res)
         with_access_token robot, res, (accessToken) ->
           comment = newComment(res)
           robot.http(issue.comments_url)
@@ -126,3 +159,9 @@ module.exports = (robot) ->
                 name: "heavy_check_mark"
                 channel: res.message.room
                 timestamp: res.message.id
+
+  robot.hear /([\s\S]*)/i, (res) ->
+    thread_response(res)
+    if res.message.rawMessage.files?
+      console.log('processing file')
+      uploadFiles res
