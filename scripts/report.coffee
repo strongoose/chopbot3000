@@ -1,4 +1,46 @@
-# This is a hacked together script to allow users to raise issues with jinteki.net on slack
+# Description:
+#   This script allows Slack users to raise issues on a GitHub repository through Slack.
+#
+# Dependencies:
+#    "@slack/client": "^5.0.2",
+#    "aws-sdk": "^2.521.0",
+#    "axios": "^0.19.0",
+#    "hubot": "^3.3.2",
+#    "hubot-diagnostics": "^1.0.0",
+#    "hubot-google-images": "^0.2.7",
+#    "hubot-google-translate": "^0.2.1",
+#    "hubot-help": "^1.0.1",
+#    "hubot-heroku-keepalive": "^1.0.3",
+#    "hubot-maps": "0.0.3",
+#    "hubot-pugme": "^0.1.1",
+#    "hubot-redis-brain": "^1.0.0",
+#    "hubot-rules": "^1.0.0",
+#    "hubot-scripts": "^2.17.2",
+#    "hubot-shipit": "^0.2.1",
+#    "hubot-slack": "^4.7.1",
+#    "jsonwebtoken": "^8.5.1",
+#    "uuid": "^3.3.3",
+#    "ws": ">=3.3.1"
+#
+# Configuration:
+#   HUBOT_GITHUB_APP_ID
+#   HUBOT_GITHUB_APP_PRIVATE_KEY
+#   HUBOT_GITHUB_APP_INSTALL_ID
+#   HUBOT_GITHUB_REPOSITORY
+#   HUBOT_SLACK_TOKEN
+#   HUBOT_SLACK_MAINTAINER_ID
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#
+# Commands:
+#   !bug <bug report> - Raises an issue with title set to the first line of the
+#                       message with further lines added to the issue body. Threaded
+#                       messages will be added to the issue as comments. Files in the
+#                       issue or comments will be added as markdown images.
+#
+# Author:
+#   ouroboros8
+
 jwt = require 'jsonwebtoken'
 {WebClient} = require "@slack/client"
 S3 = require('aws-sdk/clients/s3')
