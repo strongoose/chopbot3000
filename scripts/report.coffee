@@ -33,10 +33,7 @@
 #   AWS_SECRET_ACCESS_KEY
 #
 # Commands:
-#   !bug <bug report> - Raises an issue with title set to the first line of the
-#                       message with further lines added to the issue body. Threaded
-#                       messages will be added to the issue as comments. Files in the
-#                       issue or comments will be added as markdown images.
+#   !bug <bug report> - Raises an issue with title set to the first line of the message with further lines added to the issue body. Threaded messages will be added to the issue as comments. Files in the issue or comments will be added as markdown images.
 #
 # Author:
 #   ouroboros8
